@@ -403,6 +403,30 @@
     border: none; font-size: 1.2rem; cursor: pointer; font-weight: 700;
   }
   .persons-val { font-size: 1rem; font-weight: 800; min-width: 24px; text-align: center; }
+
+  /* ── AUTOCOMPLETE ── */
+  .autocomplete-wrap { position: relative; }
+  .autocomplete-list {
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--white);
+    border: 1.5px solid var(--olive);
+    border-radius: 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 999;
+    box-shadow: var(--shadow-lg);
+    margin-top: 3px;
+  }
+  .autocomplete-item {
+    padding: 11px 14px;
+    cursor: pointer;
+    font-size: 0.92rem;
+    border-bottom: 1px solid var(--gray-light);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:active, .autocomplete-item.highlighted { background: var(--olive-pale); }
+  .autocomplete-cat { font-size: 0.68rem; color: var(--gray); margin-left: auto; }
 </style>
 </head>
 <body>
@@ -532,7 +556,11 @@
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">Bezeichnung</label>
-        <input class="form-input" id="pf-name" placeholder="z.B. Mehl">
+        <div class="autocomplete-wrap">
+          <input class="form-input" id="pf-name" placeholder="Tippen zum Suchen…" autocomplete="off"
+            oninput="acInput(this.value)" onkeydown="acKeydown(event)" onfocus="acInput(this.value)">
+          <div class="autocomplete-list" id="ac-list" style="display:none"></div>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -990,6 +1018,227 @@ function toggleShoppingItem(key) {
   save(KEY_SHOPPING, shopping);
   renderShopping();
 }
+
+// ═══════════════════════════════════════════
+// LEBENSMITTEL-DATENBANK
+// ═══════════════════════════════════════════
+const FOODS = [
+  // Gemüse
+  {n:'Artischocken',e:'g',c:'🥦 Gemüse'},{n:'Aubergine',e:'g',c:'🥦 Gemüse'},{n:'Avocado',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Blumenkohl',e:'Stk.',c:'🥦 Gemüse'},{n:'Bohnen (grün)',e:'g',c:'🥦 Gemüse'},{n:'Broccoli',e:'g',c:'🥦 Gemüse'},
+  {n:'Champignons',e:'g',c:'🥦 Gemüse'},{n:'Chicorée',e:'Stk.',c:'🥦 Gemüse'},{n:'Chinakohl',e:'g',c:'🥦 Gemüse'},
+  {n:'Erbsen (TK)',e:'g',c:'🥦 Gemüse'},{n:'Fenchel',e:'Stk.',c:'🥦 Gemüse'},{n:'Gurke',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Karotten',e:'g',c:'🥦 Gemüse'},{n:'Kartoffeln',e:'kg',c:'🥦 Gemüse'},{n:'Knoblauch',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Knollensellerie',e:'g',c:'🥦 Gemüse'},{n:'Kohlrabi',e:'Stk.',c:'🥦 Gemüse'},{n:'Kopfsalat',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Kürbis',e:'g',c:'🥦 Gemüse'},{n:'Lauch',e:'Stk.',c:'🥦 Gemüse'},{n:'Mais (Dose)',e:'Dose',c:'🥦 Gemüse'},
+  {n:'Mangold',e:'g',c:'🥦 Gemüse'},{n:'Paprika (gelb)',e:'Stk.',c:'🥦 Gemüse'},{n:'Paprika (rot)',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Paprika (grün)',e:'Stk.',c:'🥦 Gemüse'},{n:'Pastinaken',e:'g',c:'🥦 Gemüse'},{n:'Peperoni',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Peperoncini',e:'Stk.',c:'🥦 Gemüse'},{n:'Porree',e:'Stk.',c:'🥦 Gemüse'},{n:'Radieschen',e:'Bund',c:'🥦 Gemüse'},
+  {n:'Randen (Rote Bete)',e:'g',c:'🥦 Gemüse'},{n:'Rosenkohl',e:'g',c:'🥦 Gemüse'},{n:'Rotkohl',e:'g',c:'🥦 Gemüse'},
+  {n:'Rucola',e:'g',c:'🥦 Gemüse'},{n:'Schwarzwurzeln',e:'g',c:'🥦 Gemüse'},{n:'Selleriestangen',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Spinat',e:'g',c:'🥦 Gemüse'},{n:'Tomate',e:'Stk.',c:'🥦 Gemüse'},{n:'Tomaten (Dose)',e:'Dose',c:'🥦 Gemüse'},
+  {n:'Tomaten (Cherry)',e:'g',c:'🥦 Gemüse'},{n:'Weißkohl',e:'g',c:'🥦 Gemüse'},{n:'Wirsing',e:'g',c:'🥦 Gemüse'},
+  {n:'Zucchetti',e:'Stk.',c:'🥦 Gemüse'},{n:'Zuckerschoten',e:'g',c:'🥦 Gemüse'},{n:'Zwiebeln',e:'Stk.',c:'🥦 Gemüse'},
+  {n:'Frühlingszwiebeln',e:'Bund',c:'🥦 Gemüse'},{n:'Rote Zwiebeln',e:'Stk.',c:'🥦 Gemüse'},
+  // Früchte
+  {n:'Ananas',e:'Stk.',c:'🍎 Früchte'},{n:'Apfel',e:'Stk.',c:'🍎 Früchte'},{n:'Aprikosen',e:'g',c:'🍎 Früchte'},
+  {n:'Banane',e:'Stk.',c:'🍎 Früchte'},{n:'Birne',e:'Stk.',c:'🍎 Früchte'},{n:'Blaubeeren',e:'g',c:'🍎 Früchte'},
+  {n:'Brombeeren',e:'g',c:'🍎 Früchte'},{n:'Clementinen',e:'Stk.',c:'🍎 Früchte'},{n:'Datteln',e:'g',c:'🍎 Früchte'},
+  {n:'Erdbeeren',e:'g',c:'🍎 Früchte'},{n:'Feigen',e:'Stk.',c:'🍎 Früchte'},{n:'Grapefruit',e:'Stk.',c:'🍎 Früchte'},
+  {n:'Himbeeren',e:'g',c:'🍎 Früchte'},{n:'Kirschen',e:'g',c:'🍎 Früchte'},{n:'Kiwi',e:'Stk.',c:'🍎 Früchte'},
+  {n:'Lemon',e:'Stk.',c:'🍎 Früchte'},{n:'Limette',e:'Stk.',c:'🍎 Früchte'},{n:'Mango',e:'Stk.',c:'🍎 Früchte'},
+  {n:'Melone',e:'Stk.',c:'🍎 Früchte'},{n:'Nektarine',e:'Stk.',c:'🍎 Früchte'},{n:'Orange',e:'Stk.',c:'🍎 Früchte'},
+  {n:'Papaya',e:'Stk.',c:'🍎 Früchte'},{n:'Pfirsich',e:'Stk.',c:'🍎 Früchte'},{n:'Pflaumen',e:'g',c:'🍎 Früchte'},
+  {n:'Rosinen',e:'g',c:'🍎 Früchte'},{n:'Trauben',e:'g',c:'🍎 Früchte'},{n:'Wassermelone',e:'Stk.',c:'🍎 Früchte'},
+  {n:'Weintrauben (rot)',e:'g',c:'🍎 Früchte'},{n:'Zitrone',e:'Stk.',c:'🍎 Früchte'},
+  // Fleisch & Fisch
+  {n:'Chicken Breast (Poulet)',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Pouletschenkel',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Pouletflügel',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Hackfleisch (gemischt)',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Hackfleisch (Rind)',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Hackfleisch (Schwein)',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Rindsfilet',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Rindsbraten',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Kalbsgeschnetzeltes',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Kalbsfilet',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Schweinshals',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Schweinsfilet',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Lammhüfte',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Lammkoteletts',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Speck',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Bacon',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Cervelat',e:'Stk.',c:'🥩 Fleisch & Fisch'},{n:'Salami',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Bratwurst',e:'Stk.',c:'🥩 Fleisch & Fisch'},{n:'Landjäger',e:'Stk.',c:'🥩 Fleisch & Fisch'},
+  {n:'Lachs (frisch)',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Lachs (geräuchert)',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Thunfisch (Dose)',e:'Dose',c:'🥩 Fleisch & Fisch'},{n:'Kabeljau',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Forelle',e:'Stk.',c:'🥩 Fleisch & Fisch'},{n:'Crevetten',e:'g',c:'🥩 Fleisch & Fisch'},
+  {n:'Miesmuscheln',e:'g',c:'🥩 Fleisch & Fisch'},{n:'Calamari',e:'g',c:'🥩 Fleisch & Fisch'},
+  // Milchprodukte & Eier
+  {n:'Butter',e:'g',c:'🧀 Milch & Eier'},{n:'Rahm',e:'ml',c:'🧀 Milch & Eier'},
+  {n:'Halbrahm',e:'ml',c:'🧀 Milch & Eier'},{n:'Milch (Vollmilch)',e:'ml',c:'🧀 Milch & Eier'},
+  {n:'Milch (Magermilch)',e:'ml',c:'🧀 Milch & Eier'},{n:'Buttermilch',e:'ml',c:'🧀 Milch & Eier'},
+  {n:'Joghurt (nature)',e:'g',c:'🧀 Milch & Eier'},{n:'Joghurt (griechisch)',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Quark',e:'g',c:'🧀 Milch & Eier'},{n:'Crème fraîche',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Sauerrahm',e:'g',c:'🧀 Milch & Eier'},{n:'Frischkäse',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Mozzarella',e:'g',c:'🧀 Milch & Eier'},{n:'Parmesan',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Gruyère',e:'g',c:'🧀 Milch & Eier'},{n:'Emmentaler',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Appenzeller',e:'g',c:'🧀 Milch & Eier'},{n:'Raclette-Käse',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Feta',e:'g',c:'🧀 Milch & Eier'},{n:'Ricotta',e:'g',c:'🧀 Milch & Eier'},
+  {n:'Mascarpone',e:'g',c:'🧀 Milch & Eier'},{n:'Eier',e:'Stk.',c:'🧀 Milch & Eier'},
+  // Getreide & Mehl
+  {n:'Mehl (Weiss)',e:'g',c:'🌾 Getreide'},{n:'Mehl (Vollkorn)',e:'g',c:'🌾 Getreide'},
+  {n:'Dinkelmehl',e:'g',c:'🌾 Getreide'},{n:'Maismehl',e:'g',c:'🌾 Getreide'},
+  {n:'Reismehl',e:'g',c:'🌾 Getreide'},{n:'Paniermehl',e:'g',c:'🌾 Getreide'},
+  {n:'Reis (Langkorn)',e:'g',c:'🌾 Getreide'},{n:'Reis (Risotto)',e:'g',c:'🌾 Getreide'},
+  {n:'Basmati-Reis',e:'g',c:'🌾 Getreide'},{n:'Vollkornreis',e:'g',c:'🌾 Getreide'},
+  {n:'Spaghetti',e:'g',c:'🌾 Getreide'},{n:'Penne',e:'g',c:'🌾 Getreide'},
+  {n:'Tagliatelle',e:'g',c:'🌾 Getreide'},{n:'Fusilli',e:'g',c:'🌾 Getreide'},
+  {n:'Lasagneblätter',e:'g',c:'🌾 Getreide'},{n:'Nudeln (Eier)',e:'g',c:'🌾 Getreide'},
+  {n:'Couscous',e:'g',c:'🌾 Getreide'},{n:'Bulgur',e:'g',c:'🌾 Getreide'},
+  {n:'Quinoa',e:'g',c:'🌾 Getreide'},{n:'Polenta',e:'g',c:'🌾 Getreide'},
+  {n:'Haferflocken',e:'g',c:'🌾 Getreide'},{n:'Müesli',e:'g',c:'🌾 Getreide'},
+  {n:'Cornflakes',e:'g',c:'🌾 Getreide'},{n:'Panko',e:'g',c:'🌾 Getreide'},
+  {n:'Backpulver',e:'g',c:'🌾 Getreide'},{n:'Hefe (trocken)',e:'g',c:'🌾 Getreide'},
+  {n:'Hefe (frisch)',e:'g',c:'🌾 Getreide'},{n:'Natron',e:'g',c:'🌾 Getreide'},
+  {n:'Speisestärke',e:'g',c:'🌾 Getreide'},{n:'Griesmehl',e:'g',c:'🌾 Getreide'},
+  // Hülsenfrüchte
+  {n:'Kichererbsen (Dose)',e:'Dose',c:'🫘 Hülsenfrüchte'},{n:'Kichererbsen (trocken)',e:'g',c:'🫘 Hülsenfrüchte'},
+  {n:'Linsen (rot)',e:'g',c:'🫘 Hülsenfrüchte'},{n:'Linsen (grün)',e:'g',c:'🫘 Hülsenfrüchte'},
+  {n:'Linsen (schwarz)',e:'g',c:'🫘 Hülsenfrüchte'},{n:'Kidneybohnen (Dose)',e:'Dose',c:'🫘 Hülsenfrüchte'},
+  {n:'Kidneybohnen (trocken)',e:'g',c:'🫘 Hülsenfrüchte'},{n:'Weisse Bohnen (Dose)',e:'Dose',c:'🫘 Hülsenfrüchte'},
+  {n:'Schwarze Bohnen (Dose)',e:'Dose',c:'🫘 Hülsenfrüchte'},{n:'Erbsen (trocken)',e:'g',c:'🫘 Hülsenfrüchte'},
+  {n:'Edamame',e:'g',c:'🫘 Hülsenfrüchte'},{n:'Tofu',e:'g',c:'🫘 Hülsenfrüchte'},
+  // Öle & Fette
+  {n:'Olivenöl',e:'ml',c:'🫙 Öle & Fette'},{n:'Sonnenblumenöl',e:'ml',c:'🫙 Öle & Fette'},
+  {n:'Rapsöl',e:'ml',c:'🫙 Öle & Fette'},{n:'Kokosöl',e:'ml',c:'🫙 Öle & Fette'},
+  {n:'Sesamöl',e:'ml',c:'🫙 Öle & Fette'},{n:'Erdnussöl',e:'ml',c:'🫙 Öle & Fette'},
+  {n:'Ghee',e:'g',c:'🫙 Öle & Fette'},{n:'Schmalz',e:'g',c:'🫙 Öle & Fette'},
+  {n:'Margarine',e:'g',c:'🫙 Öle & Fette'},
+  // Gewürze & Kräuter
+  {n:'Salz',e:'g',c:'🌿 Gewürze'},{n:'Pfeffer (schwarz)',e:'g',c:'🌿 Gewürze'},
+  {n:'Pfeffer (weiss)',e:'g',c:'🌿 Gewürze'},{n:'Paprikapulver (süss)',e:'g',c:'🌿 Gewürze'},
+  {n:'Paprikapulver (scharf)',e:'g',c:'🌿 Gewürze'},{n:'Kreuzkümmel',e:'g',c:'🌿 Gewürze'},
+  {n:'Koriander (gemahlen)',e:'g',c:'🌿 Gewürze'},{n:'Kurkuma',e:'g',c:'🌿 Gewürze'},
+  {n:'Zimt (gemahlen)',e:'g',c:'🌿 Gewürze'},{n:'Kardamom',e:'g',c:'🌿 Gewürze'},
+  {n:'Muskatnuss',e:'g',c:'🌿 Gewürze'},{n:'Nelken',e:'g',c:'🌿 Gewürze'},
+  {n:'Cayennepfeffer',e:'g',c:'🌿 Gewürze'},{n:'Chili (Flocken)',e:'g',c:'🌿 Gewürze'},
+  {n:'Curry (Pulver)',e:'g',c:'🌿 Gewürze'},{n:'Garam Masala',e:'g',c:'🌿 Gewürze'},
+  {n:'Oregano (getrocknet)',e:'g',c:'🌿 Gewürze'},{n:'Thymian (getrocknet)',e:'g',c:'🌿 Gewürze'},
+  {n:'Rosmarin (getrocknet)',e:'g',c:'🌿 Gewürze'},{n:'Basilikum (getrocknet)',e:'g',c:'🌿 Gewürze'},
+  {n:'Lorbeerblätter',e:'Stk.',c:'🌿 Gewürze'},{n:'Kümmel',e:'g',c:'🌿 Gewürze'},
+  {n:'Fenchelsamen',e:'g',c:'🌿 Gewürze'},{n:'Senfkörner',e:'g',c:'🌿 Gewürze'},
+  {n:'Sternanis',e:'Stk.',c:'🌿 Gewürze'},{n:'Vanillezucker',e:'g',c:'🌿 Gewürze'},
+  {n:'Vanilleschote',e:'Stk.',c:'🌿 Gewürze'},{n:'Safran',e:'g',c:'🌿 Gewürze'},
+  // Frische Kräuter
+  {n:'Basilikum (frisch)',e:'Bund',c:'🌱 Frische Kräuter'},{n:'Petersilie (glatt)',e:'Bund',c:'🌱 Frische Kräuter'},
+  {n:'Petersilie (kraus)',e:'Bund',c:'🌱 Frische Kräuter'},{n:'Schnittlauch',e:'Bund',c:'🌱 Frische Kräuter'},
+  {n:'Dill',e:'Bund',c:'🌱 Frische Kräuter'},{n:'Minze',e:'Bund',c:'🌱 Frische Kräuter'},
+  {n:'Thymian (frisch)',e:'Bund',c:'🌱 Frische Kräuter'},{n:'Rosmarin (frisch)',e:'Stk.',c:'🌱 Frische Kräuter'},
+  {n:'Salbei',e:'Stk.',c:'🌱 Frische Kräuter'},{n:'Koriander (frisch)',e:'Bund',c:'🌱 Frische Kräuter'},
+  {n:'Ingwer (frisch)',e:'g',c:'🌱 Frische Kräuter'},{n:'Zitronengras',e:'Stk.',c:'🌱 Frische Kräuter'},
+  // Saucen & Würzmittel
+  {n:'Sojasauce',e:'ml',c:'🥫 Saucen'},{n:'Worcestersauce',e:'ml',c:'🥫 Saucen'},
+  {n:'Tabasco',e:'ml',c:'🥫 Saucen'},{n:'Fischsauce',e:'ml',c:'🥫 Saucen'},
+  {n:'Austernsauce',e:'ml',c:'🥫 Saucen'},{n:'Teriyakisauce',e:'ml',c:'🥫 Saucen'},
+  {n:'Tomatensauce (Glas)',e:'g',c:'🥫 Saucen'},{n:'Tomatenmark',e:'g',c:'🥫 Saucen'},
+  {n:'Ketchup',e:'ml',c:'🥫 Saucen'},{n:'Mayonnaise',e:'g',c:'🥫 Saucen'},
+  {n:'Senf (mittelscharf)',e:'g',c:'🥫 Saucen'},{n:'Dijonsenf',e:'g',c:'🥫 Saucen'},
+  {n:'Honig',e:'g',c:'🥫 Saucen'},{n:'Ahornsirup',e:'ml',c:'🥫 Saucen'},
+  {n:'Essig (Rotwein)',e:'ml',c:'🥫 Saucen'},{n:'Essig (Weisswein)',e:'ml',c:'🥫 Saucen'},
+  {n:'Balsamico',e:'ml',c:'🥫 Saucen'},{n:'Apfelessig',e:'ml',c:'🥫 Saucen'},
+  {n:'Zitronensaft',e:'ml',c:'🥫 Saucen'},{n:'Kokosmilch (Dose)',e:'Dose',c:'🥫 Saucen'},
+  {n:'Passata',e:'ml',c:'🥫 Saucen'},{n:'Harissa',e:'g',c:'🥫 Saucen'},
+  {n:'Pesto (Basilikum)',e:'g',c:'🥫 Saucen'},{n:'Tahini',e:'g',c:'🥫 Saucen'},
+  // Nüsse & Samen
+  {n:'Mandeln (ganz)',e:'g',c:'🥜 Nüsse & Samen'},{n:'Mandeln (gemahlen)',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Mandeln (gehobelt)',e:'g',c:'🥜 Nüsse & Samen'},{n:'Walnüsse',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Haselnüsse',e:'g',c:'🥜 Nüsse & Samen'},{n:'Cashewnüsse',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Erdnüsse',e:'g',c:'🥜 Nüsse & Samen'},{n:'Erdnussbutter',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Pistazie',e:'g',c:'🥜 Nüsse & Samen'},{n:'Pinienkerne',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Sesam',e:'g',c:'🥜 Nüsse & Samen'},{n:'Kürbiskerne',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Sonnenblumenkerne',e:'g',c:'🥜 Nüsse & Samen'},{n:'Leinsamen',e:'g',c:'🥜 Nüsse & Samen'},
+  {n:'Chiasamen',e:'g',c:'🥜 Nüsse & Samen'},{n:'Mohnkörner',e:'g',c:'🥜 Nüsse & Samen'},
+  // Süsses & Backen
+  {n:'Zucker (weiss)',e:'g',c:'🍫 Süsses & Backen'},{n:'Zucker (braun)',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Puderzucker',e:'g',c:'🍫 Süsses & Backen'},{n:'Rohrzucker',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Schokolade (dunkel)',e:'g',c:'🍫 Süsses & Backen'},{n:'Schokolade (Milch)',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Schokolade (weiss)',e:'g',c:'🍫 Süsses & Backen'},{n:'Kakaopulver',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Schokoladetropfen',e:'g',c:'🍫 Süsses & Backen'},{n:'Gelatine',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Agar-Agar',e:'g',c:'🍫 Süsses & Backen'},{n:'Marillenmarmelade',e:'g',c:'🍫 Süsses & Backen'},
+  {n:'Erdbeermarmelade',e:'g',c:'🍫 Süsses & Backen'},{n:'Nutella',e:'g',c:'🍫 Süsses & Backen'},
+  // Brot & Gebäck
+  {n:'Weissbrot',e:'g',c:'🍞 Brot'},{n:'Vollkornbrot',e:'g',c:'🍞 Brot'},
+  {n:'Ruchbrot',e:'g',c:'🍞 Brot'},{n:'Baguette',e:'Stk.',c:'🍞 Brot'},
+  {n:'Toastbrot',e:'Pkg.',c:'🍞 Brot'},{n:'Ciabatta',e:'Stk.',c:'🍞 Brot'},
+  {n:'Brötchen',e:'Stk.',c:'🍞 Brot'},{n:'Tortillas',e:'Pkg.',c:'🍞 Brot'},
+  {n:'Wraps',e:'Pkg.',c:'🍞 Brot'},{n:'Pitabrot',e:'Stk.',c:'🍞 Brot'},
+  // Getränke
+  {n:'Weisswein',e:'ml',c:'🥤 Getränke'},{n:'Rotwein',e:'ml',c:'🥤 Getränke'},
+  {n:'Weissbier',e:'ml',c:'🥤 Getränke'},{n:'Gemüsebrühe',e:'ml',c:'🥤 Getränke'},
+  {n:'Rindsbrühe',e:'ml',c:'🥤 Getränke'},{n:'Hühnerbrühe',e:'ml',c:'🥤 Getränke'},
+  {n:'Orangensaft',e:'ml',c:'🥤 Getränke'},{n:'Apfelsaft',e:'ml',c:'🥤 Getränke'},
+  {n:'Milch (Hafer)',e:'ml',c:'🥤 Getränke'},{n:'Milch (Soja)',e:'ml',c:'🥤 Getränke'},
+  {n:'Milch (Mandel)',e:'ml',c:'🥤 Getränke'},{n:'Espresso',e:'ml',c:'🥤 Getränke'},
+  // Tiefkühl
+  {n:'Rahmspinat (TK)',e:'g',c:'❄️ Tiefkühl'},{n:'Blätterteig (TK)',e:'Pkg.',c:'❄️ Tiefkühl'},
+  {n:'Kroketten (TK)',e:'g',c:'❄️ Tiefkühl'},{n:'Pommes frites (TK)',e:'g',c:'❄️ Tiefkühl'},
+  {n:'Beerenmischung (TK)',e:'g',c:'❄️ Tiefkühl'},{n:'Mango (TK)',e:'g',c:'❄️ Tiefkühl'},
+  // Diverses
+  {n:'Brühwürfel (Gemüse)',e:'Stk.',c:'🫙 Diverses'},{n:'Brühwürfel (Rind)',e:'Stk.',c:'🫙 Diverses'},
+  {n:'Brühwürfel (Huhn)',e:'Stk.',c:'🫙 Diverses'},{n:'Hüttenkäse',e:'g',c:'🫙 Diverses'},
+  {n:'Salatdressing',e:'ml',c:'🫙 Diverses'},{n:'Croutons',e:'g',c:'🫙 Diverses'},
+  {n:'Kapern',e:'g',c:'🫙 Diverses'},{n:'Oliven (schwarz)',e:'g',c:'🫙 Diverses'},
+  {n:'Oliven (grün)',e:'g',c:'🫙 Diverses'},{n:'Cornichons',e:'g',c:'🫙 Diverses'},
+  {n:'Rüeblisaft',e:'ml',c:'🫙 Diverses'},{n:'Sojagurt',e:'g',c:'🫙 Diverses'},
+];
+
+// ═══════════════════════════════════════════
+// AUTOCOMPLETE LOGIC
+// ═══════════════════════════════════════════
+let acIndex = -1;
+
+function acInput(val) {
+  const list = document.getElementById('ac-list');
+  const q = val.trim().toLowerCase();
+  if (!q) { list.style.display = 'none'; return; }
+  const matches = FOODS.filter(f => f.n.toLowerCase().includes(q)).slice(0, 30);
+  if (!matches.length) { list.style.display = 'none'; return; }
+  acIndex = -1;
+  list.innerHTML = matches.map((f, i) =>
+    `<div class="autocomplete-item" data-idx="${i}" data-name="${f.n}" data-unit="${f.e}"
+      onmousedown="acSelect('${f.n}','${f.e}')">
+      ${f.n}<span class="autocomplete-cat">${f.c}</span>
+    </div>`
+  ).join('');
+  list.style.display = 'block';
+}
+
+function acSelect(name, unit) {
+  document.getElementById('pf-name').value = name;
+  document.getElementById('pf-unit').value = unit;
+  document.getElementById('ac-list').style.display = 'none';
+}
+
+function acKeydown(e) {
+  const list = document.getElementById('ac-list');
+  const items = list.querySelectorAll('.autocomplete-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    acIndex = Math.min(acIndex + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+    e.preventDefault();
+  } else if (e.key === 'ArrowUp') {
+    acIndex = Math.max(acIndex - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('highlighted', i === acIndex));
+    e.preventDefault();
+  } else if (e.key === 'Enter' && acIndex >= 0) {
+    const item = items[acIndex];
+    acSelect(item.dataset.name, item.dataset.unit);
+    e.preventDefault();
+  } else if (e.key === 'Escape') {
+    list.style.display = 'none';
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.autocomplete-wrap')) {
+    const list = document.getElementById('ac-list');
+    if (list) list.style.display = 'none';
+  }
+});
 
 // ═══════════════════════════════════════════
 // INIT
