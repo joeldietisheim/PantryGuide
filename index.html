@@ -1358,11 +1358,14 @@ function renderShopping() {
 }
 
 function shoppingItemHtml(item, isChecked) {
+  // Show amount+unit; if amount is 0 or missing show only unit (e.g. "Stk." without a number)
+  const amt = parseFloat(item.amount);
+  const qtyStr = (amt && amt > 0) ? formatAmount(amt) + ' ' + (item.unit || '') : (item.unit || '');
   return `<div class="shopping-item ${isChecked ? 'checked' : ''}">
     <div onclick="toggleShoppingItem('${item.key}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
       <div class="shopping-check">${isChecked ? '✓' : ''}</div>
       <div class="shopping-name">${item.name}</div>
-      <div class="shopping-qty">${item.amount ? formatAmount(item.amount) + ' ' + item.unit : item.unit || ''}</div>
+      <div class="shopping-qty">${qtyStr}</div>
     </div>
     <button onclick="removeShoppingItem('${item.key}')"
       style="background:none;border:none;color:var(--gray);font-size:1rem;cursor:pointer;padding:4px 6px;flex-shrink:0">✕</button>
@@ -1376,7 +1379,8 @@ function addManualShoppingItem() {
   const unit = document.getElementById('sh-manual-unit').value;
   if (!shopping.items) shopping.items = [];
   const key = 'manual_' + name.toLowerCase().replace(/\s/g,'_') + '_' + Date.now();
-  shopping.items.push({ name, amount: parseFloat(qty) || 0, unit, key, manual: true });
+  const parsedQty = parseFloat(qty);
+  shopping.items.push({ name, amount: isNaN(parsedQty) ? null : parsedQty, unit, key, manual: true });
   shopping.items.sort((a,b) => a.name.localeCompare(b.name));
   save(KEY_SHOPPING, shopping);
   document.getElementById('sh-manual-name').value = '';
@@ -1493,9 +1497,17 @@ function generateShoppingList() {
       item.amount = Math.max(0, item.amount - parseFloat(pantryMatch.qty || 0));
       item.fromPantry = parseFloat(pantryMatch.qty || 0);
     }
+    // If amount ended up 0 but was never set (no menge in recipe), keep as-is for display
   });
 
-  shopping.items = allItems.sort((a,b) => a.name.localeCompare(b.name));
+  // Remove items where pantry fully covers the needed amount (amount exactly 0 AND had pantry match)
+  // but keep items where amount was 0 to begin with (no menge entered) – those still need buying
+  const visibleItems = allItems.filter(item => {
+    if (item.fromPantry && item.amount === 0) return false; // fully covered by pantry
+    return true;
+  });
+
+  shopping.items = visibleItems.sort((a,b) => a.name.localeCompare(b.name));
   shopping.checkedItems = [];
   save(KEY_SHOPPING, shopping);
   renderShopping();
