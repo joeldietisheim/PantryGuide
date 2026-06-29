@@ -446,7 +446,11 @@
 </div>
 
 <!-- PAGES -->
-<div id="page-recipes" class="page active">
+<div id="page-home" class="page active">
+  <div id="home-content"></div>
+</div>
+
+<div id="page-recipes" class="page">
   <input class="search-bar" id="recipe-search" placeholder="🔍 Rezept suchen…" oninput="renderRecipes()">
   <div id="recipe-filters" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:4px;scrollbar-width:none"></div>
   <div id="recipe-list"></div>
@@ -471,7 +475,10 @@
 
 <!-- BOTTOM TABS -->
 <nav class="tabs">
-  <button class="tab-btn active" onclick="switchPage('recipes', this)">
+  <button class="tab-btn active" onclick="switchPage('home', this)">
+    <span class="tab-icon">🏡</span>Start
+  </button>
+  <button class="tab-btn" onclick="switchPage('recipes', this)">
     <span class="tab-icon">🍳</span>Rezepte
   </button>
   <button class="tab-btn" onclick="switchPage('pantry', this)">
@@ -479,6 +486,9 @@
   </button>
   <button class="tab-btn" onclick="switchPage('shopping', this)">
     <span class="tab-icon">🛒</span>Einkauf
+  </button>
+  <button class="tab-btn" onclick="switchPage('discover', this)">
+    <span class="tab-icon">🔍</span>Entdecken
   </button>
   <button class="tab-btn" onclick="switchPage('foods', this)">
     <span class="tab-icon">📋</span>Liste
@@ -676,6 +686,54 @@
   </div>
 </div>
 
+<!-- ═══════════════ MODAL: BACKUP ═══════════════ -->
+<div class="modal-overlay" id="modal-backup">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>💾 Backup</h2>
+      <button class="modal-close" onclick="closeModal('modal-backup')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-title">Exportieren</div>
+      <p style="font-size:0.82rem;color:var(--gray);line-height:1.5;margin-bottom:12px">
+        Alle Daten (Rezepte, Vorrat, Einkaufsliste, eigene Lebensmittel) als JSON-Datei speichern.
+        Diese Datei kannst du in iCloud oder Google Drive ablegen.
+      </p>
+      <button class="btn btn-primary" onclick="exportBackup()" style="margin-bottom:18px">⬇️ Daten exportieren</button>
+
+      <div class="section-title">Importieren</div>
+      <p style="font-size:0.82rem;color:var(--gray);line-height:1.5;margin-bottom:12px">
+        Backup wiederherstellen. <strong style="color:var(--red)">Achtung:</strong> bestehende Daten werden überschrieben.
+      </p>
+      <div class="photo-zone" id="backup-drop-zone" style="margin-bottom:10px">
+        <input type="file" accept=".json" onchange="importBackup(event)">
+        <span class="photo-zone-icon">📂</span>
+        JSON-Datei auswählen
+      </div>
+      <div id="backup-import-status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL: PANTRY REFILL ═══════════════ -->
+<div class="modal-overlay" id="modal-refill">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2>🏠 Vorrat auffüllen</h2>
+      <button class="modal-close" onclick="closeModal('modal-refill')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.82rem;color:var(--gray);line-height:1.5;margin-bottom:14px">
+        Welche abgehakten Artikel möchtest du dem Vorrat hinzufügen?
+      </p>
+      <div id="refill-list"></div>
+      <button class="btn btn-primary" style="margin-top:14px" onclick="confirmRefill()">✅ Ausgewählte zum Vorrat hinzufügen</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -696,8 +754,8 @@ let shopping = load(KEY_SHOPPING, { selected: {}, checkedItems: [] });
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-let currentPage = 'recipes';
-const titles = { recipes: '🌿 Meine Rezepte', pantry: '🏠 Vorrat', shopping: '🛒 Einkaufsliste', discover: '🔍 Entdecken', foods: '📋 Lebensmittelliste' };
+let currentPage = 'home';
+const titles = { home: '🏡 Übersicht', recipes: '🌿 Meine Rezepte', pantry: '🏠 Vorrat', shopping: '🛒 Einkaufsliste', discover: '🔍 Entdecken', foods: '📋 Lebensmittelliste' };
 
 function switchPage(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -706,14 +764,18 @@ function switchPage(page, btn) {
   btn.classList.add('active');
   document.getElementById('page-title').textContent = titles[page];
   currentPage = page;
-  if (page === 'recipes') renderRecipes();
+  if (page === 'home') renderHome();
+  if (page === 'recipes') renderHome();
+renderRecipes();
   if (page === 'pantry') renderPantry();
   if (page === 'shopping') renderShopping();
+  if (page === 'discover') renderDiscover();
   if (page === 'discover') renderDiscover();
   if (page === 'foods') renderFoods();
 }
 
 function fabClick() {
+  if (currentPage === 'home') return;
   if (currentPage === 'recipes') openRecipeForm();
   else if (currentPage === 'pantry') openPantryForm();
   else if (currentPage === 'shopping') renderShopping();
@@ -1282,7 +1344,10 @@ function renderShopping() {
     const done = shopping.items.filter(i => checked.includes(i.key));
     html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
       <span>Einkaufen (${unchecked.length})</span>
-      <button onclick="clearShoppingList()" style="background:none;border:none;color:var(--gray);font-size:0.75rem;cursor:pointer;font-weight:700">Liste leeren</button>
+      <span style="display:flex;gap:8px">
+        <button onclick="openRefillModal()" style="background:none;border:none;color:var(--olive);font-size:0.75rem;cursor:pointer;font-weight:700">🏠 Auffüllen</button>
+        <button onclick="clearShoppingList()" style="background:none;border:none;color:var(--gray);font-size:0.75rem;cursor:pointer;font-weight:700">🗑 Leeren</button>
+      </span>
     </div>
     <div class="card" style="padding:0">
       ${unchecked.length ? unchecked.map(i => shoppingItemHtml(i, false)).join('') : '<div class="pantry-item" style="color:var(--olive);font-weight:700">✅ Alles erledigt!</div>'}
@@ -1682,6 +1747,251 @@ document.addEventListener('click', e => {
     if (l) l.style.display = 'none';
   }
 });
+
+// ═══════════════════════════════════════════
+// STARTSEITE
+// ═══════════════════════════════════════════
+function renderHome() {
+  const wrap = document.getElementById('home-content');
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Expiry alerts
+  const overdue = pantry.filter(p => { if (!p.expiry) return false; const e = new Date(p.expiry); e.setHours(0,0,0,0); return e < today; });
+  const soon = pantry.filter(p => { if (!p.expiry) return false; const e = new Date(p.expiry); e.setHours(0,0,0,0); const d = Math.round((e-today)/86400000); return d>=0&&d<=7; });
+
+  // Pantry-match recipes (>=80%)
+  const pantryNames = pantry.map(p => p.name.toLowerCase().trim());
+  const cookable = recipes.filter(r => {
+    const ings = (r.ingredients||[]).filter(i => i.name);
+    if (!ings.length) return false;
+    return ings.filter(i => pantryNames.includes(i.name.toLowerCase().trim())).length / ings.length >= 0.8;
+  }).slice(0, 3);
+
+  // Shopping progress
+  const shItems = shopping.items || [];
+  const shChecked = (shopping.checkedItems || []).length;
+  const shTotal = shItems.length;
+
+  let html = '';
+
+  // greeting
+  const hour = new Date().getHours();
+  const greet = hour < 11 ? 'Guten Morgen' : hour < 17 ? 'Guten Tag' : 'Guten Abend';
+  html += `<div style="background:var(--olive);border-radius:16px;padding:18px 20px;margin-bottom:14px;color:white">
+    <div style="font-size:1.1rem;font-weight:800;margin-bottom:2px">${greet}! 👋</div>
+    <div style="font-size:0.82rem;opacity:0.85">${today.toLocaleDateString('de-CH',{weekday:'long',day:'numeric',month:'long'})}</div>
+    <div style="display:flex;gap:14px;margin-top:12px">
+      <div style="text-align:center">
+        <div style="font-size:1.4rem;font-weight:900">${recipes.length}</div>
+        <div style="font-size:0.7rem;opacity:0.8">Rezepte</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:1.4rem;font-weight:900">${pantry.length}</div>
+        <div style="font-size:0.7rem;opacity:0.8">Vorrat</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:1.4rem;font-weight:900">${shTotal}</div>
+        <div style="font-size:0.7rem;opacity:0.8">Einkauf</div>
+      </div>
+    </div>
+  </div>`;
+
+  // Alerts
+  if (overdue.length || soon.length) {
+    html += `<div class="section-title">⚠️ Ablaufdaten</div><div class="card" style="padding:0">`;
+    overdue.forEach(p => html += `<div class="pantry-item" onclick="switchPageByName('pantry')">
+      <div><div class="pantry-name">${p.name}</div><div class="expiry over">Abgelaufen</div></div>
+      <div class="pantry-qty">${p.qty} ${p.unit}</div></div>`);
+    soon.forEach(p => {
+      const diff = Math.round((new Date(p.expiry)-today)/86400000);
+      html += `<div class="pantry-item" onclick="switchPageByName('pantry')">
+        <div><div class="pantry-name">${p.name}</div><div class="expiry warn">in ${diff}d</div></div>
+        <div class="pantry-qty">${p.qty} ${p.unit}</div></div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Shopping progress
+  if (shTotal > 0) {
+    const pct = Math.round(shChecked/shTotal*100);
+    html += `<div class="section-title">🛒 Einkauf</div>
+    <div class="card" style="padding:14px 16px;cursor:pointer" onclick="switchPageByName('shopping')">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:0.88rem;font-weight:700">${shChecked} von ${shTotal} erledigt</span>
+        <span style="font-size:0.82rem;color:var(--olive);font-weight:700">${pct}%</span>
+      </div>
+      <div style="height:6px;background:var(--gray-light);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--olive);border-radius:4px;transition:width 0.3s"></div>
+      </div>
+    </div>`;
+  }
+
+  // What can I cook
+  if (cookable.length) {
+    html += `<div class="section-title">🍳 Heute kochen</div><div class="card" style="padding:0">`;
+    cookable.forEach(r => {
+      const ings = (r.ingredients||[]).filter(i=>i.name);
+      const covered = ings.filter(i=>pantryNames.includes(i.name.toLowerCase().trim())).length;
+      const pct = Math.round(covered/ings.length*100);
+      html += `<div class="pantry-item" onclick="openRecipeDetail('${r.id}')">
+        <div style="flex:1"><div class="pantry-name">${r.title}</div>
+        <div class="pantry-detail">${covered}/${ings.length} Zutaten vorhanden</div></div>
+        <span class="badge" style="background:var(--olive-pale);color:var(--olive)">${pct}%</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Quick actions
+  html += `<div class="section-title">Schnellzugriff</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+    <button onclick="switchPageByName('recipes');setTimeout(openRecipeForm,100)"
+      style="background:var(--white);border:none;border-radius:12px;padding:14px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;text-align:left">
+      <div style="font-size:1.4rem;margin-bottom:4px">➕</div>
+      <div style="font-size:0.82rem;font-weight:700">Rezept erfassen</div>
+    </button>
+    <button onclick="switchPageByName('pantry');setTimeout(()=>openPantryForm(),100)"
+      style="background:var(--white);border:none;border-radius:12px;padding:14px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;text-align:left">
+      <div style="font-size:1.4rem;margin-bottom:4px">🏠</div>
+      <div style="font-size:0.82rem;font-weight:700">Vorrat erfassen</div>
+    </button>
+    <button onclick="switchPageByName('discover')"
+      style="background:var(--white);border:none;border-radius:12px;padding:14px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;text-align:left">
+      <div style="font-size:1.4rem;margin-bottom:4px">🔍</div>
+      <div style="font-size:0.82rem;font-weight:700">Entdecken</div>
+    </button>
+    <button onclick="openModal('modal-backup')"
+      style="background:var(--white);border:none;border-radius:12px;padding:14px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit;text-align:left">
+      <div style="font-size:1.4rem;margin-bottom:4px">💾</div>
+      <div style="font-size:0.82rem;font-weight:700">Backup</div>
+    </button>
+  </div>`;
+
+  wrap.innerHTML = html;
+}
+
+function switchPageByName(page) {
+  const tabs = document.querySelectorAll('.tab-btn');
+  const pageNames = ['home','recipes','pantry','shopping','foods'];
+  // find tab index by checking onclick
+  tabs.forEach(btn => {
+    if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes("'"+page+"'")) {
+      switchPage(page, btn);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════
+// BACKUP & RESTORE
+// ═══════════════════════════════════════════
+function exportBackup() {
+  const data = {
+    version: 1,
+    exported: new Date().toISOString(),
+    recipes: load(KEY_RECIPES, []),
+    pantry: load(KEY_PANTRY, []),
+    shopping: load(KEY_SHOPPING, {}),
+    customFoods: load(KEY_CUSTOM_FOODS, []),
+    unitOverrides: load(KEY_UNIT_OVERRIDES, {})
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rezepte-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ Backup exportiert');
+}
+
+function importBackup(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const status = document.getElementById('backup-import-status');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.version || !data.recipes) throw new Error('Ungültiges Format');
+      if (!confirm(`Backup vom ${data.exported ? new Date(data.exported).toLocaleDateString('de-CH') : '?'} importieren?
+
+Dies überschreibt alle aktuellen Daten.`)) return;
+      if (data.recipes)       { save(KEY_RECIPES, data.recipes); recipes = data.recipes; }
+      if (data.pantry)        { save(KEY_PANTRY, data.pantry); pantry = data.pantry; }
+      if (data.shopping)      { save(KEY_SHOPPING, data.shopping); shopping = data.shopping; }
+      if (data.customFoods)   { save(KEY_CUSTOM_FOODS, data.customFoods); customFoods = data.customFoods; }
+      if (data.unitOverrides) { save(KEY_UNIT_OVERRIDES, data.unitOverrides); unitOverrides = data.unitOverrides; }
+      rebuildFoods();
+      status.innerHTML = `<div style="background:#EBF0E6;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--olive);font-weight:700">
+        ✅ ${data.recipes.length} Rezepte, ${data.pantry.length} Vorratselemente importiert</div>`;
+      closeModal('modal-backup');
+      renderHome();
+      showToast('✅ Backup wiederhergestellt');
+    } catch(err) {
+      status.innerHTML = `<div style="background:#FCE8E8;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--red);font-weight:700">
+        ⚠️ Fehler: ${err.message}</div>`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════
+// VORRAT AUFFÜLLEN (aus Einkaufsliste)
+// ═══════════════════════════════════════════
+let refillCandidates = [];
+
+function openRefillModal() {
+  const checked = shopping.checkedItems || [];
+  const items = (shopping.items || []).filter(i => checked.includes(i.key));
+  if (!items.length) { showToast('Keine abgehakten Artikel'); return; }
+
+  refillCandidates = items.map(i => ({ ...i, selected: true }));
+
+  const list = document.getElementById('refill-list');
+  list.innerHTML = refillCandidates.map((item, idx) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--gray-light)">
+      <input type="checkbox" id="refill-${idx}" checked onchange="refillCandidates[${idx}].selected=this.checked"
+        style="accent-color:var(--olive);width:18px;height:18px;flex-shrink:0">
+      <label for="refill-${idx}" style="flex:1;font-size:0.9rem;font-weight:600;cursor:pointer">${item.name}</label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="number" value="${item.amount||''}" placeholder="Menge"
+          style="width:60px;border:1.5px solid var(--gray-light);border-radius:8px;padding:5px 6px;font-size:0.82rem;text-align:center"
+          onchange="refillCandidates[${idx}].amount=parseFloat(this.value)||0">
+        <span style="font-size:0.82rem;color:var(--gray)">${item.unit||''}</span>
+      </div>
+    </div>`
+  ).join('');
+
+  openModal('modal-refill');
+}
+
+function confirmRefill() {
+  const toAdd = refillCandidates.filter(i => i.selected);
+  if (!toAdd.length) { showToast('Keine Artikel ausgewählt'); return; }
+
+  toAdd.forEach(item => {
+    const existing = pantry.find(p =>
+      p.name.toLowerCase().trim() === item.name.toLowerCase().trim() && p.unit === item.unit
+    );
+    if (existing) {
+      existing.qty = parseFloat(existing.qty||0) + parseFloat(item.amount||0);
+    } else {
+      pantry.push({
+        id: 'p' + Date.now() + Math.random().toString(36).slice(2,5),
+        name: item.name,
+        qty: parseFloat(item.amount||0),
+        unit: item.unit || '',
+        expiry: ''
+      });
+    }
+  });
+
+  save(KEY_PANTRY, pantry);
+  closeModal('modal-refill');
+  showToast('✅ ' + toAdd.length + ' Artikel zum Vorrat hinzugefügt');
+  if (currentPage === 'pantry') renderPantry();
+  if (currentPage === 'home') renderHome();
+}
 
 // ═══════════════════════════════════════════
 // LEBENSMITTEL-DATENBANK
