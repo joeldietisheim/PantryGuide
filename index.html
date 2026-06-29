@@ -88,7 +88,7 @@
   .tab-btn.active .tab-icon { transform: scale(1.1); }
 
   /* ── PAGES ── */
-  .page { display: none; padding: 16px 16px 90px; }
+  .page { display: none; padding: 16px 16px 90px; overflow: visible; }
   .page.active { display: block; }
 
   /* ── CARDS ── */
@@ -413,44 +413,6 @@
   }
   .persons-val { font-size: 1rem; font-weight: 800; min-width: 24px; text-align: center; }
 
-  /* ── WOCHENMENU ── */
-  .day-card {
-    background: var(--white);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    margin-bottom: 10px;
-    overflow: hidden;
-  }
-  .day-header {
-    background: var(--olive);
-    color: white;
-    padding: 9px 14px;
-    font-size: 0.82rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .day-header.today { background: var(--terra); }
-  .day-slot {
-    display: flex;
-    align-items: center;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--gray-light);
-    gap: 10px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .day-slot:last-child { border-bottom: none; }
-  .day-slot:active { background: var(--cream); }
-  .day-slot-label { font-size: 0.7rem; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.04em; min-width: 48px; }
-  .day-slot-recipe { flex: 1; }
-  .day-slot-title { font-size: 0.88rem; font-weight: 700; }
-  .day-slot-sub { font-size: 0.72rem; color: var(--gray); margin-top: 1px; }
-  .day-slot-empty { font-size: 0.82rem; color: var(--gray-light); font-style: italic; }
-  .day-slot-del { background: none; border: none; color: var(--gray); font-size: 0.9rem; cursor: pointer; padding: 4px; }
 
   /* ── AUTOCOMPLETE ── */
   .autocomplete-wrap { position: relative; }
@@ -503,8 +465,8 @@
   <div id="foods-content"></div>
 </div>
 
-<div id="page-menu" class="page">
-  <div id="menu-content"></div>
+<div id="page-discover" class="page">
+  <div id="discover-content"></div>
 </div>
 
 <!-- BOTTOM TABS -->
@@ -517,9 +479,6 @@
   </button>
   <button class="tab-btn" onclick="switchPage('shopping', this)">
     <span class="tab-icon">🛒</span>Einkauf
-  </button>
-  <button class="tab-btn" onclick="switchPage('menu', this)">
-    <span class="tab-icon">📅</span>Menu
   </button>
   <button class="tab-btn" onclick="switchPage('foods', this)">
     <span class="tab-icon">📋</span>Liste
@@ -717,22 +676,6 @@
   </div>
 </div>
 
-<!-- ═══════════════ MODAL: MENU RECIPE PICKER ═══════════════ -->
-<div class="modal-overlay" id="modal-menu-pick">
-  <div class="modal">
-    <div class="modal-handle"></div>
-    <div class="modal-header">
-      <h2 id="menu-pick-title">Rezept wählen</h2>
-      <button class="modal-close" onclick="closeModal('modal-menu-pick')">✕</button>
-    </div>
-    <div class="modal-body" style="padding-top:8px">
-      <input class="search-bar" id="menu-pick-search" placeholder="🔍 Suchen…" oninput="renderMenuPicker()" style="margin-bottom:10px">
-      <div id="menu-pick-list"></div>
-      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:10px" onclick="clearMenuSlot()">🗑 Slot leeren</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -754,7 +697,7 @@ let shopping = load(KEY_SHOPPING, { selected: {}, checkedItems: [] });
 // NAVIGATION
 // ═══════════════════════════════════════════
 let currentPage = 'recipes';
-const titles = { recipes: '🌿 Meine Rezepte', pantry: '🏠 Vorrat', shopping: '🛒 Einkaufsliste', menu: '📅 Wochenmenu', foods: '📋 Lebensmittelliste' };
+const titles = { recipes: '🌿 Meine Rezepte', pantry: '🏠 Vorrat', shopping: '🛒 Einkaufsliste', discover: '🔍 Entdecken', foods: '📋 Lebensmittelliste' };
 
 function switchPage(page, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -766,7 +709,7 @@ function switchPage(page, btn) {
   if (page === 'recipes') renderRecipes();
   if (page === 'pantry') renderPantry();
   if (page === 'shopping') renderShopping();
-  if (page === 'menu') renderMenu();
+  if (page === 'discover') renderDiscover();
   if (page === 'foods') renderFoods();
 }
 
@@ -774,7 +717,7 @@ function fabClick() {
   if (currentPage === 'recipes') openRecipeForm();
   else if (currentPage === 'pantry') openPantryForm();
   else if (currentPage === 'shopping') renderShopping();
-  else if (currentPage === 'menu') renderMenu();
+  else if (currentPage === 'discover') return;
   else if (currentPage === 'foods') openAddFoodModal();
 }
 
@@ -1310,25 +1253,21 @@ function renderShopping() {
 
   // Manual add row
   const manualRow = `<div class="section-title">Manuell hinzufügen</div>
-    <div class="card" style="padding:12px 14px;margin-bottom:14px">
-      <div style="display:flex;gap:6px;align-items:flex-end">
-        <div class="form-group" style="flex:3;margin:0;position:relative">
+    <div class="card" style="padding:12px 14px;margin-bottom:14px;overflow:visible">
+      <div style="display:flex;gap:6px;align-items:flex-end;overflow:visible">
+        <div style="flex:3;position:relative">
           <input class="form-input" id="sh-manual-name" placeholder="Zutat" autocomplete="off"
             oninput="shAcInput(this.value)" onkeydown="shAcKeydown(event)"
-            onfocus="shAcInput(this.value)" style="font-size:0.85rem;padding:8px 10px">
-          <div class="autocomplete-list" id="sh-ac-list" style="display:none"></div>
+            onfocus="shAcInput(this.value)" style="font-size:0.85rem;padding:8px 10px;width:100%">
+          <div class="autocomplete-list" id="sh-ac-list" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:500"></div>
         </div>
-        <div class="form-group" style="flex:2;margin:0">
-          <input class="form-input" id="sh-manual-qty" type="number" placeholder="Menge"
-            style="font-size:0.85rem;padding:8px 10px">
-        </div>
-        <div class="form-group" style="flex:2;margin:0">
-          <select class="form-select" id="sh-manual-unit" style="font-size:0.85rem;padding:8px 10px">
-            <option>g</option><option>kg</option><option>ml</option><option>l</option>
-            <option>EL</option><option>TL</option><option>Stk.</option><option>Pkg.</option>
-            <option>Bund</option><option>Dose</option><option>Prise</option>
-          </select>
-        </div>
+        <input class="form-input" id="sh-manual-qty" type="number" placeholder="Menge"
+          style="flex:2;font-size:0.85rem;padding:8px 10px">
+        <select class="form-select" id="sh-manual-unit" style="flex:2;font-size:0.85rem;padding:8px 10px">
+          <option>g</option><option>kg</option><option>ml</option><option>l</option>
+          <option>EL</option><option>TL</option><option>Stk.</option><option>Pkg.</option>
+          <option>Bund</option><option>Dose</option><option>Prise</option>
+        </select>
         <button onclick="addManualShoppingItem()" style="background:var(--olive);color:white;border:none;border-radius:8px;width:36px;height:36px;font-size:1.2rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center">＋</button>
       </div>
     </div>`;
@@ -1523,172 +1462,226 @@ function toggleShoppingItem(key) {
   renderShopping();
 }
 
+
 // ═══════════════════════════════════════════
-// WOCHENMENU
+// ENTDECKEN – Resteverwertung & Zutatensuche
 // ═══════════════════════════════════════════
-const KEY_MENU = 'weekmenu_v1';
-const DAYS = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
-const MEALS = ['Morgen','Mittag','Abend'];
-// menu structure: { 'Montag_Mittag': { recipeId, persons } }
-let weekMenu = load(KEY_MENU, {});
+let discoverMode = 'leftovers'; // 'leftovers' | 'ingredient'
+let ingredientSearchTerm = '';
 
-let menuPickDay = null;
-let menuPickMeal = null;
+function renderDiscover() {
+  const wrap = document.getElementById('discover-content');
 
-function getWeekDates() {
-  // Returns array of 7 Date objects starting from current Monday
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dow + 6) % 7));
-  return Array.from({length:7}, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+  // Tab switcher
+  const tabBar = `<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button onclick="setDiscoverMode('leftovers')" style="flex:1;border:none;border-radius:10px;padding:10px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;
+      background:${discoverMode==='leftovers'?'var(--olive)':'var(--white)'};color:${discoverMode==='leftovers'?'white':'var(--gray)'};box-shadow:var(--shadow)">
+      🏠 Resteverwertung
+    </button>
+    <button onclick="setDiscoverMode('ingredient')" style="flex:1;border:none;border-radius:10px;padding:10px;font-size:0.82rem;font-weight:700;cursor:pointer;font-family:inherit;
+      background:${discoverMode==='ingredient'?'var(--olive)':'var(--white)'};color:${discoverMode==='ingredient'?'white':'var(--gray)'};box-shadow:var(--shadow)">
+      🔍 Zutat suchen
+    </button>
+  </div>`;
+
+  wrap.innerHTML = tabBar + '<div id="discover-results"></div>';
+  renderDiscoverResults();
 }
 
-function renderMenu() {
-  const wrap = document.getElementById('menu-content');
-  const dates = getWeekDates();
-  const todayStr = new Date().toDateString();
-
-  let html = `<button class="btn btn-terra" style="margin-bottom:14px;justify-content:center" onclick="menuToShopping()">🛒 Woche → Einkaufsliste</button>`;
-
-  dates.forEach((date, di) => {
-    const dayName = DAYS[di];
-    const isToday = date.toDateString() === todayStr;
-    const dateStr = date.toLocaleDateString('de-CH', {day:'numeric', month:'short'});
-
-    html += `<div class="day-card">
-      <div class="day-header ${isToday ? 'today' : ''}">
-        <span>${dayName}</span>
-        <span style="font-weight:400;font-size:0.75rem;opacity:0.85">${dateStr}</span>
-      </div>`;
-
-    MEALS.forEach(meal => {
-      const key = dayName + '_' + meal;
-      const slot = weekMenu[key];
-      const r = slot ? recipes.find(x => x.id === slot.recipeId) : null;
-      if (r) {
-        const totalTime = (r.prepTime||0)+(r.cookTime||0);
-        html += `<div class="day-slot" onclick="openMenuPicker('${dayName}','${meal}')">
-          <span class="day-slot-label">${meal}</span>
-          <div class="day-slot-recipe">
-            <div class="day-slot-title">${r.title}</div>
-            <div class="day-slot-sub">👥 ${slot.persons || r.persons} Pers.${totalTime ? ' · ⏱ '+totalTime+' Min.' : ''}</div>
-          </div>
-          <button class="day-slot-del" onclick="event.stopPropagation();clearMenuSlotDirect('${key}')">✕</button>
-        </div>`;
-      } else {
-        html += `<div class="day-slot" onclick="openMenuPicker('${dayName}','${meal}')">
-          <span class="day-slot-label">${meal}</span>
-          <span class="day-slot-empty">Tippe zum Planen…</span>
-        </div>`;
-      }
-    });
-
-    html += `</div>`;
-  });
-
-  wrap.innerHTML = html;
+function setDiscoverMode(mode) {
+  discoverMode = mode;
+  renderDiscover();
+  if (mode === 'ingredient') {
+    setTimeout(() => {
+      const inp = document.getElementById('ingredient-search-input');
+      if (inp) inp.focus();
+    }, 100);
+  }
 }
 
-function openMenuPicker(day, meal) {
-  menuPickDay = day;
-  menuPickMeal = meal;
-  document.getElementById('menu-pick-title').textContent = day + ' · ' + meal;
-  document.getElementById('menu-pick-search').value = '';
-  renderMenuPicker();
-  openModal('modal-menu-pick');
+function renderDiscoverResults() {
+  const res = document.getElementById('discover-results');
+  if (discoverMode === 'leftovers') renderLeftovers(res);
+  else renderIngredientSearch(res);
 }
 
-function renderMenuPicker() {
-  const q = document.getElementById('menu-pick-search').value.toLowerCase();
-  const list = document.getElementById('menu-pick-list');
-  const filtered = recipes.filter(r => r.title.toLowerCase().includes(q) || (r.cat||'').toLowerCase().includes(q));
-  if (!filtered.length) {
-    list.innerHTML = `<div class="empty" style="padding:20px"><div class="empty-icon" style="font-size:2rem">🔍</div><p>Keine Rezepte gefunden</p></div>`;
+// ── RESTEVERWERTUNG ──
+function renderLeftovers(container) {
+  if (!pantry.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🏠</div><h3>Vorrat ist leer</h3>
+      <p>Trage zuerst Vorräte ein, dann findest du passende Rezepte.</p></div>`;
     return;
   }
-  const key = menuPickDay + '_' + menuPickMeal;
-  const current = weekMenu[key];
-  list.innerHTML = filtered.map(r => {
-    const isSelected = current && current.recipeId === r.id;
-    const totalTime = (r.prepTime||0)+(r.cookTime||0);
-    return `<div onclick="pickMenuRecipe('${r.id}')"
-      style="display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--gray-light);cursor:pointer">
-      <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${isSelected?'var(--olive)':'var(--gray-light)'};
-        background:${isSelected?'var(--olive)':'transparent'};display:flex;align-items:center;justify-content:center;
-        color:white;font-size:0.75rem;flex-shrink:0">${isSelected?'✓':''}</div>
-      <div style="flex:1">
-        <div style="font-size:0.9rem;font-weight:700">${r.title}</div>
-        <div style="font-size:0.72rem;color:var(--gray)">
-          👥 ${r.persons} Pers.${r.cat?' · '+r.cat:''}${totalTime?' · ⏱ '+totalTime+' Min.':''}
+  if (!recipes.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🍽️</div><h3>Noch keine Rezepte</h3>
+      <p>Erfasse zuerst Rezepte.</p></div>`;
+    return;
+  }
+
+  // Score each recipe: how many of its ingredients are covered by pantry
+  const pantryNames = pantry.map(p => p.name.toLowerCase().trim());
+
+  const scored = recipes.map(r => {
+    const ings = (r.ingredients || []).filter(i => i.name && i.name.trim());
+    if (!ings.length) return null;
+    const covered = ings.filter(i => pantryNames.includes(i.name.toLowerCase().trim())).length;
+    const pct = covered / ings.length;
+    return { r, covered, total: ings.length, pct };
+  }).filter(x => x && x.pct >= 0.5) // at least 50% covered
+    .sort((a, b) => b.pct - a.pct);
+
+  if (!scored.length) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🤔</div><h3>Keine passenden Rezepte</h3>
+      <p>Für kein Rezept sind mindestens 50% der Zutaten im Vorrat vorhanden.</p></div>`;
+    return;
+  }
+
+  // Group by coverage
+  const perfect = scored.filter(x => x.pct === 1);
+  const high = scored.filter(x => x.pct >= 0.8 && x.pct < 1);
+  const medium = scored.filter(x => x.pct >= 0.5 && x.pct < 0.8);
+
+  let html = '';
+  if (perfect.length) html += renderDiscoverGroup('✅ Vollständig vorhanden', perfect, 'var(--olive)');
+  if (high.length)    html += renderDiscoverGroup('🟡 Fast komplett (80%+)', high, 'var(--yellow)');
+  if (medium.length)  html += renderDiscoverGroup('🟠 Über die Hälfte (50%+)', medium, 'var(--terra)');
+  container.innerHTML = html;
+}
+
+function renderDiscoverGroup(title, items, color) {
+  return `<div class="section-title" style="color:${color}">${title}</div>
+  <div class="card" style="padding:0;margin-bottom:12px">
+    ${items.map(({r, covered, total, pct}) => {
+      const missing = (r.ingredients||[]).filter(i => i.name && !pantry.find(p => p.name.toLowerCase().trim() === i.name.toLowerCase().trim()));
+      const pctInt = Math.round(pct * 100);
+      const bar = `<div style="height:4px;background:var(--gray-light);border-radius:4px;margin-top:6px;overflow:hidden">
+        <div style="height:100%;width:${pctInt}%;background:${color};border-radius:4px;transition:width 0.3s"></div></div>`;
+      const missingHtml = missing.length
+        ? `<div style="font-size:0.7rem;color:var(--gray);margin-top:3px">Fehlt: ${missing.map(i=>i.name).join(', ')}</div>`
+        : '';
+      const totalTime = (r.prepTime||0)+(r.cookTime||0);
+      return `<div style="padding:12px 14px;border-bottom:1px solid var(--gray-light);cursor:pointer"
+        onclick="openRecipeDetail('${r.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="font-size:0.9rem;font-weight:700;flex:1">${r.title}</div>
+          <span style="font-size:0.75rem;font-weight:800;color:${color};flex-shrink:0">${pctInt}%</span>
         </div>
-      </div>
-    </div>`;
-  }).join('');
+        <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
+          <span class="badge">👥 ${r.persons} Pers.</span>
+          ${r.cat ? `<span class="badge terra">${r.cat}</span>` : ''}
+          ${totalTime ? `<span class="badge">⏱ ${totalTime} Min.</span>` : ''}
+          <span class="badge">${covered}/${total} Zutaten</span>
+        </div>
+        ${bar}
+        ${missingHtml}
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
-function pickMenuRecipe(recipeId) {
-  const key = menuPickDay + '_' + menuPickMeal;
-  const r = recipes.find(x => x.id === recipeId);
-  weekMenu[key] = { recipeId, persons: r ? r.persons : 4 };
-  save(KEY_MENU, weekMenu);
-  closeModal('modal-menu-pick');
-  renderMenu();
-  showToast('✅ ' + r.title + ' geplant');
+// ── ZUTAT SUCHEN ──
+function renderIngredientSearch(container) {
+  const acHtml = `<div class="autocomplete-wrap" style="margin-bottom:14px">
+    <input class="search-bar" id="ingredient-search-input" placeholder="🔍 Zutat eingeben…"
+      style="margin-bottom:0" autocomplete="off"
+      value="${ingredientSearchTerm}"
+      oninput="ingredientSearchTerm=this.value;ingSearchAcInput(this.value)"
+      onkeydown="ingSearchKeydown(event)"
+      onfocus="ingSearchAcInput(this.value)">
+    <div class="autocomplete-list" id="ing-search-ac-list" style="display:none"></div>
+  </div>
+  <div id="ing-search-results"></div>`;
+
+  container.innerHTML = acHtml;
+  if (ingredientSearchTerm) renderIngredientResults();
 }
 
-function clearMenuSlot() {
-  const key = menuPickDay + '_' + menuPickMeal;
-  delete weekMenu[key];
-  save(KEY_MENU, weekMenu);
-  closeModal('modal-menu-pick');
-  renderMenu();
+function ingSearchAcInput(val) {
+  const list = document.getElementById('ing-search-ac-list');
+  const q = val.trim().toLowerCase();
+  if (!q) { list.style.display='none'; return; }
+  const matches = FOODS.filter(f => f.n.toLowerCase().includes(q)).slice(0,20);
+  // also add pantry items
+  const pantryMatches = pantry.filter(p => p.name.toLowerCase().includes(q) && !matches.find(f=>f.n.toLowerCase()===p.name.toLowerCase()));
+  const all = [...matches.map(f=>f.n), ...pantryMatches.map(p=>p.name)].slice(0,25);
+  if (!all.length) { list.style.display='none'; return; }
+  list.innerHTML = all.map(name =>
+    `<div class="autocomplete-item" onmousedown="selectIngredientSearch('${name.replace(/'/g,"\'")}')">
+      ${name}
+    </div>`
+  ).join('');
+  list.style.display = 'block';
 }
 
-function clearMenuSlotDirect(key) {
-  delete weekMenu[key];
-  save(KEY_MENU, weekMenu);
-  renderMenu();
+function ingSearchKeydown(e) {
+  const list = document.getElementById('ing-search-ac-list');
+  const items = list ? list.querySelectorAll('.autocomplete-item') : [];
+  if (e.key === 'Enter' && (!items.length || list.style.display==='none')) {
+    document.getElementById('ing-search-ac-list').style.display='none';
+    renderIngredientResults();
+    return;
+  }
+  let cur = list ? list.querySelector('.highlighted') : null;
+  let idx = cur ? [...items].indexOf(cur) : -1;
+  if (e.key==='ArrowDown') { idx=Math.min(idx+1,items.length-1); items.forEach((el,i)=>el.classList.toggle('highlighted',i===idx)); e.preventDefault(); }
+  else if (e.key==='ArrowUp') { idx=Math.max(idx-1,0); items.forEach((el,i)=>el.classList.toggle('highlighted',i===idx)); e.preventDefault(); }
+  else if (e.key==='Enter' && idx>=0) { selectIngredientSearch(items[idx].textContent.trim()); e.preventDefault(); }
+  else if (e.key==='Escape') list.style.display='none';
 }
 
-function menuToShopping() {
-  // Build shopping list from all planned meals
-  const planned = Object.values(weekMenu);
-  if (!planned.length) { showToast('Noch kein Menu geplant'); return; }
-
-  const aggregate = {};
-  planned.forEach(slot => {
-    const r = recipes.find(x => x.id === slot.recipeId);
-    if (!r || !r.ingredients) return;
-    const factor = (slot.persons || r.persons) / (r.persons || 1);
-    r.ingredients.forEach(ing => {
-      const key = ing.name.toLowerCase().trim() + '_' + ing.unit;
-      if (!aggregate[key]) aggregate[key] = { name: ing.name, unit: ing.unit, amount: 0, key };
-      aggregate[key].amount += parseFloat(ing.amount || 0) * factor;
-    });
-  });
-
-  // Subtract pantry
-  const allItems = Object.values(aggregate);
-  allItems.forEach(item => {
-    const pm = pantry.find(p => p.name.toLowerCase().trim() === item.name.toLowerCase().trim() && p.unit === item.unit);
-    if (pm) item.amount = Math.max(0, item.amount - parseFloat(pm.qty || 0));
-  });
-
-  shopping.items = allItems.sort((a,b) => a.name.localeCompare(b.name));
-  shopping.checkedItems = [];
-  shopping.selected = {};
-  save(KEY_SHOPPING, shopping);
-
-  // Switch to shopping tab
-  const shBtn = document.querySelectorAll('.tab-btn')[2];
-  switchPage('shopping', shBtn);
-  showToast('🛒 Einkaufsliste für die Woche erstellt!');
+function selectIngredientSearch(name) {
+  ingredientSearchTerm = name;
+  const inp = document.getElementById('ingredient-search-input');
+  if (inp) inp.value = name;
+  const list = document.getElementById('ing-search-ac-list');
+  if (list) list.style.display = 'none';
+  renderIngredientResults();
 }
+
+function renderIngredientResults() {
+  const res = document.getElementById('ing-search-results');
+  if (!res) return;
+  const q = ingredientSearchTerm.trim().toLowerCase();
+  if (!q) { res.innerHTML = ''; return; }
+
+  const matched = recipes.filter(r =>
+    (r.ingredients||[]).some(i => i.name && i.name.toLowerCase().includes(q))
+  );
+
+  if (!matched.length) {
+    res.innerHTML = `<div class="empty" style="padding:24px 0"><div class="empty-icon" style="font-size:2rem">🔍</div>
+      <h3>Keine Rezepte gefunden</h3>
+      <p>Kein Rezept enthält «${ingredientSearchTerm}».</p></div>`;
+    return;
+  }
+
+  res.innerHTML = `<div class="section-title">${matched.length} Rezept${matched.length!==1?'e':''} mit «${ingredientSearchTerm}»</div>
+  <div class="card" style="padding:0">
+    ${matched.map(r => {
+      const matchedIngs = (r.ingredients||[]).filter(i => i.name && i.name.toLowerCase().includes(q));
+      const totalTime = (r.prepTime||0)+(r.cookTime||0);
+      return `<div style="padding:12px 14px;border-bottom:1px solid var(--gray-light);cursor:pointer" onclick="openRecipeDetail('${r.id}')">
+        <div style="font-size:0.9rem;font-weight:700;margin-bottom:4px">${r.title}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+          <span class="badge">👥 ${r.persons} Pers.</span>
+          ${r.cat?`<span class="badge terra">${r.cat}</span>`:''}
+          ${totalTime?`<span class="badge">⏱ ${totalTime} Min.</span>`:''}
+        </div>
+        <div style="font-size:0.75rem;color:var(--olive);font-weight:600">
+          ${matchedIngs.map(i=>`${i.name}${i.amount?' ('+i.amount+' '+i.unit+')':''}`).join(' · ')}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// close ing search autocomplete on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ingredient-search-input') && !e.target.closest('#ing-search-ac-list')) {
+    const l = document.getElementById('ing-search-ac-list');
+    if (l) l.style.display = 'none';
+  }
+});
 
 // ═══════════════════════════════════════════
 // LEBENSMITTEL-DATENBANK
