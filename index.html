@@ -700,11 +700,21 @@
         Alle Daten (Rezepte, Vorrat, Einkaufsliste, eigene Lebensmittel) als JSON-Datei speichern.
         Diese Datei kannst du in iCloud oder Google Drive ablegen.
       </p>
-      <button class="btn btn-primary" onclick="exportBackup()" style="margin-bottom:18px">⬇️ Daten exportieren</button>
+      <button class="btn btn-primary" onclick="exportBackup()" style="margin-bottom:10px">⬇️ Daten exportieren</button>
+      <div style="font-size:0.72rem;color:var(--gray);margin-bottom:8px" id="auto-backup-info"></div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:18px;font-size:0.78rem" onclick="restoreLastSnapshot()">↩️ Letzten automatischen Stand wiederherstellen</button>
+
+      <div class="section-title">Aufräumen</div>
+      <p style="font-size:0.82rem;color:var(--gray);line-height:1.5;margin-bottom:12px">
+        Entfernt versehentlich doppelt erstellte Rezepte (gleicher Titel, gleiche Zutaten und Anleitung).
+      </p>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:18px" onclick="runDedupe()">🧹 Duplikate entfernen</button>
 
       <div class="section-title">Importieren</div>
       <p style="font-size:0.82rem;color:var(--gray);line-height:1.5;margin-bottom:12px">
-        Backup wiederherstellen. <strong style="color:var(--red)">Achtung:</strong> bestehende Daten werden überschrieben.
+        Hier kannst du eine JSON-Datei einlesen: ein <strong>vollständiges Backup</strong> (überschreibt alle Daten),
+        ein <strong>einzelnes geteiltes Rezept</strong> (wird hinzugefügt) oder eine
+        <strong>geteilte Einkaufsliste</strong> (wird ergänzt). Die App erkennt automatisch worum es sich handelt.
       </p>
       <div class="photo-zone" id="backup-drop-zone" style="margin-bottom:10px">
         <input type="file" accept=".json" onchange="importBackup(event)">
@@ -745,7 +755,18 @@ const KEY_PANTRY   = 'pantry_v1';
 const KEY_SHOPPING = 'shopping_v1';
 
 function load(key, def) { try { return JSON.parse(localStorage.getItem(key)) || def; } catch { return def; } }
-function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+let snapshotDebounceTimer = null;
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+  // Debounced auto-snapshot: avoid writing a snapshot on every single
+  // keystroke-triggered save, just on the final state after changes settle.
+  if (key !== 'auto_snapshots_v1') {
+    clearTimeout(snapshotDebounceTimer);
+    snapshotDebounceTimer = setTimeout(() => {
+      if (typeof takeAutoSnapshot === 'function') takeAutoSnapshot();
+    }, 1500);
+  }
+}
 
 let recipes  = load(KEY_RECIPES, []);
 let pantry   = load(KEY_PANTRY, []);
@@ -786,7 +807,10 @@ function fabClick() {
 // ═══════════════════════════════════════════
 // MODALS
 // ═══════════════════════════════════════════
-function openModal(id) { document.getElementById(id).classList.add('open'); }
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  if (id === 'modal-backup' && typeof updateAutoBackupInfo === 'function') updateAutoBackupInfo();
+}
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
@@ -1028,37 +1052,106 @@ function getIngredients() {
   }).filter(i => i.name);
 }
 
+let isSavingRecipe = false;
+
 function saveRecipe() {
-  const title = document.getElementById('rf-title').value.trim();
-  if (!title) { showToast('Bitte Titel eingeben'); return; }
-  const r = {
-    id: editingRecipeId || 'r' + Date.now(),
-    title,
-    persons: parseInt(document.getElementById('rf-persons').value),
-    cat: document.getElementById('rf-cat').value,
-    prepTime: parseInt(document.getElementById('rf-prep').value) || 0,
-    cookTime: parseInt(document.getElementById('rf-cook').value) || 0,
-    ingredients: getIngredients(),
-    steps: document.getElementById('rf-steps').value.trim(),
-    notes: document.getElementById('rf-notes').value.trim(),
-    photos: [...currentPhotos],
-    created: editingRecipeId ? (recipes.find(x=>x.id===editingRecipeId)||{}).created : Date.now()
-  };
-  if (editingRecipeId) { const i = recipes.findIndex(x=>x.id===editingRecipeId); recipes[i] = r; }
-  else recipes.unshift(r);
-  save(KEY_RECIPES, recipes);
-  closeModal('modal-recipe');
-  renderRecipes();
-  showToast('✅ Rezept gespeichert');
+  // Guard against double-submit (rapid double-tap on mobile)
+  if (isSavingRecipe) return;
+  isSavingRecipe = true;
+
+  const saveBtn = document.querySelector('#modal-recipe .btn-primary');
+  if (saveBtn) saveBtn.disabled = true;
+
+  try {
+    const title = document.getElementById('rf-title').value.trim();
+    if (!title) { showToast('Bitte Titel eingeben'); return; }
+
+    // Capture the id we are editing BEFORE any async work, so it cannot change underneath us
+    const targetId = editingRecipeId;
+
+    const r = {
+      id: targetId || ('r' + Date.now() + '_' + Math.random().toString(36).slice(2,7)),
+      title,
+      persons: parseInt(document.getElementById('rf-persons').value),
+      cat: document.getElementById('rf-cat').value,
+      prepTime: parseInt(document.getElementById('rf-prep').value) || 0,
+      cookTime: parseInt(document.getElementById('rf-cook').value) || 0,
+      ingredients: getIngredients(),
+      steps: document.getElementById('rf-steps').value.trim(),
+      notes: document.getElementById('rf-notes').value.trim(),
+      photos: [...currentPhotos],
+      created: targetId ? (recipes.find(x=>x.id===targetId)||{}).created : Date.now()
+    };
+
+    if (targetId) {
+      const i = recipes.findIndex(x => x.id === targetId);
+      if (i >= 0) recipes[i] = r;
+      else recipes.unshift(r); // fallback: id not found, add as new
+    } else {
+      recipes.unshift(r);
+    }
+
+    save(KEY_RECIPES, recipes);
+    closeModal('modal-recipe');
+    renderRecipes();
+    if (currentPage === 'home') renderHome();
+    showToast('✅ Rezept gespeichert');
+  } finally {
+    // Always release the lock, even if something throws
+    setTimeout(() => {
+      isSavingRecipe = false;
+      if (saveBtn) saveBtn.disabled = false;
+    }, 400);
+  }
 }
 
+let isDeletingRecipe = false;
+
 function deleteRecipe() {
+  if (isDeletingRecipe) return;
+  if (!editingRecipeId) { showToast('Kein Rezept ausgewählt'); return; }
   if (!confirm('Rezept wirklich löschen?')) return;
-  recipes = recipes.filter(x => x.id !== editingRecipeId);
+
+  isDeletingRecipe = true;
+  const targetId = editingRecipeId; // capture before any UI changes
+
+  recipes = recipes.filter(x => x.id !== targetId);
   save(KEY_RECIPES, recipes);
   closeModal('modal-recipe');
   renderRecipes();
+  if (currentPage === 'home') renderHome();
   showToast('🗑 Gelöscht');
+
+  setTimeout(() => { isDeletingRecipe = false; }, 400);
+}
+
+// Utility: remove accidental duplicate recipes (same title+ingredients+steps),
+// keeping only the oldest copy of each. Safe to call any time.
+function dedupeRecipes() {
+  const seen = new Map();
+  const result = [];
+  let removed = 0;
+  // iterate oldest-first so we keep the earliest copy
+  const sorted = [...recipes].sort((a,b) => (a.created||0) - (b.created||0));
+  sorted.forEach(r => {
+    const fingerprint = JSON.stringify({
+      t: r.title.trim().toLowerCase(),
+      i: (r.ingredients||[]).map(x=>x.name.trim().toLowerCase()+x.amount+x.unit).join('|'),
+      s: (r.steps||'').trim()
+    });
+    if (seen.has(fingerprint)) {
+      removed++;
+    } else {
+      seen.set(fingerprint, true);
+      result.push(r);
+    }
+  });
+  if (removed > 0) {
+    // restore original order (newest first) for the kept recipes
+    recipes = result.sort((a,b) => (b.created||0) - (a.created||0));
+    save(KEY_RECIPES, recipes);
+  }
+  return removed;
 }
 
 let detailRecipeId = null;
@@ -1133,6 +1226,7 @@ function renderDetail() {
     ${r.notes ? `<div class="section-title">Notizen</div><p style="font-size:0.85rem;color:var(--gray);line-height:1.5">${r.notes}</p>` : ''}
     <div style="margin-top:18px;display:flex;flex-direction:column;gap:8px">
       <button class="btn btn-primary" style="justify-content:center" onclick="consumeFromPantry()">🏠 Zutaten vom Vorrat abziehen</button>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="shareRecipe('${r.id}')">📤 Rezept teilen</button>
       <button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="closeModal('modal-detail');openRecipeForm('${r.id}')">✏️ Bearbeiten</button>
     </div>`;
 }
@@ -1345,6 +1439,7 @@ function renderShopping() {
     html += `<div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
       <span>Einkaufen (${unchecked.length})</span>
       <span style="display:flex;gap:8px">
+        <button onclick="shareShoppingList()" style="background:none;border:none;color:var(--terra);font-size:0.75rem;cursor:pointer;font-weight:700">📤 Teilen</button>
         <button onclick="openRefillModal()" style="background:none;border:none;color:var(--olive);font-size:0.75rem;cursor:pointer;font-weight:700">🏠 Auffüllen</button>
         <button onclick="clearShoppingList()" style="background:none;border:none;color:var(--gray);font-size:0.75rem;cursor:pointer;font-weight:700">🗑 Leeren</button>
       </span>
@@ -1884,6 +1979,156 @@ function switchPageByName(page) {
 // ═══════════════════════════════════════════
 // BACKUP & RESTORE
 // ═══════════════════════════════════════════
+function runDedupe() {
+  const removed = dedupeRecipes();
+  const status = document.getElementById('backup-import-status');
+  if (removed > 0) {
+    status.innerHTML = `<div style="background:#EBF0E6;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--olive);font-weight:700">
+      ✅ ${removed} Duplikat${removed!==1?'e':''} entfernt</div>`;
+    renderRecipes();
+    if (currentPage === 'home') renderHome();
+    showToast('🧹 ' + removed + ' Duplikate entfernt');
+  } else {
+    status.innerHTML = `<div style="background:var(--cream);border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--gray)">
+      Keine Duplikate gefunden</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════
+// AUTOMATISCHES SICHERHEITS-SNAPSHOT
+// Zusätzlich zur normalen localStorage-Speicherung wird bei jeder
+// Änderung automatisch eine Rotations-Sicherung (letzte 3 Stände)
+// im Browser abgelegt. Schützt vor fehlerhaften Speichervorgängen,
+// ersetzt aber NICHT den manuellen Export als Datei.
+// ═══════════════════════════════════════════
+const KEY_AUTOSNAP = 'auto_snapshots_v1';
+
+function takeAutoSnapshot() {
+  try {
+    const snapshots = load(KEY_AUTOSNAP, []);
+    const snapshot = {
+      time: new Date().toISOString(),
+      recipes: load(KEY_RECIPES, []),
+      pantry: load(KEY_PANTRY, []),
+      shopping: load(KEY_SHOPPING, {}),
+      customFoods: load(KEY_CUSTOM_FOODS, []),
+      unitOverrides: load(KEY_UNIT_OVERRIDES, {})
+    };
+    snapshots.push(snapshot);
+    // keep only the last 3 snapshots to limit storage size
+    while (snapshots.length > 3) snapshots.shift();
+    save(KEY_AUTOSNAP, snapshots);
+  } catch(e) {
+    // storage might be full – fail silently, this is a best-effort safety net
+  }
+}
+
+function updateAutoBackupInfo() {
+  const el = document.getElementById('auto-backup-info');
+  if (!el) return;
+  const snapshots = load(KEY_AUTOSNAP, []);
+  if (!snapshots.length) { el.textContent = 'Noch keine automatische Sicherung vorhanden.'; return; }
+  const last = snapshots[snapshots.length-1];
+  const t = new Date(last.time);
+  el.textContent = `🔒 Letzte automatische Sicherung: ${t.toLocaleDateString('de-CH')} ${t.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'})}`;
+}
+
+function restoreLastSnapshot() {
+  const snapshots = load(KEY_AUTOSNAP, []);
+  if (!snapshots.length) { showToast('Keine Sicherung vorhanden'); return; }
+  const last = snapshots[snapshots.length-1];
+  if (!confirm('Letzten automatischen Stand wiederherstellen? Aktuelle Daten werden überschrieben.')) return;
+  recipes = last.recipes || [];
+  pantry = last.pantry || [];
+  shopping = last.shopping || {};
+  customFoods = last.customFoods || [];
+  unitOverrides = last.unitOverrides || {};
+  save(KEY_RECIPES, recipes);
+  save(KEY_PANTRY, pantry);
+  save(KEY_SHOPPING, shopping);
+  save(KEY_CUSTOM_FOODS, customFoods);
+  save(KEY_UNIT_OVERRIDES, unitOverrides);
+  rebuildFoods();
+  closeModal('modal-backup');
+  renderHome();
+  showToast('✅ Sicherung wiederhergestellt');
+}
+
+// ═══════════════════════════════════════════
+// TEILEN – einzelnes Rezept oder Einkaufsliste als JSON
+// ═══════════════════════════════════════════
+
+// Generic helper: shares a JSON file via the native iOS share sheet
+// (WhatsApp, Mail, AirDrop, Files, etc.) when available, otherwise
+// falls back to a plain file download.
+async function shareJsonFile(data, filename, shareTitle, shareText) {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const file = new File([blob], filename, { type: 'application/json' });
+
+  // Try native share sheet first (works in Safari on iOS for files)
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: shareTitle, text: shareText });
+      return true;
+    } catch (err) {
+      // user cancelled the share sheet – not an error, just stop here
+      if (err.name === 'AbortError') return false;
+      // otherwise fall through to download fallback below
+    }
+  }
+
+  // Fallback: trigger a normal download (user can then share the file manually)
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇️ Datei heruntergeladen – kann manuell geteilt werden');
+  return true;
+}
+
+async function shareRecipe(recipeId) {
+  const r = recipes.find(x => x.id === recipeId);
+  if (!r) return;
+  const payload = {
+    type: 'recipe',
+    version: 1,
+    exported: new Date().toISOString(),
+    recipe: r
+  };
+  const safeFilename = r.title.toLowerCase()
+    .replace(/[äöü]/g, m => ({ä:'ae',ö:'oe',ü:'ue'}[m]))
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g,'') || 'rezept';
+  const ok = await shareJsonFile(
+    payload,
+    'rezept-' + safeFilename + '.json',
+    'Rezept: ' + r.title,
+    'Hier ist mein Rezept "' + r.title + '" – einfach in der Rezepte-App unter Backup importieren.'
+  );
+  if (ok) showToast('📤 Rezept geteilt');
+}
+
+async function shareShoppingList() {
+  const items = shopping.items || [];
+  if (!items.length) { showToast('Einkaufsliste ist leer'); return; }
+  const payload = {
+    type: 'shoppingList',
+    version: 1,
+    exported: new Date().toISOString(),
+    items: items,
+    checkedItems: shopping.checkedItems || []
+  };
+  const ok = await shareJsonFile(
+    payload,
+    'einkaufsliste-' + new Date().toISOString().slice(0,10) + '.json',
+    'Einkaufsliste',
+    'Hier ist eine Einkaufsliste – einfach in der Rezepte-App unter Backup importieren.'
+  );
+  if (ok) showToast('📤 Einkaufsliste geteilt');
+}
+
 function exportBackup() {
   const data = {
     version: 1,
@@ -1912,6 +2157,47 @@ function importBackup(e) {
   reader.onload = ev => {
     try {
       const data = JSON.parse(ev.target.result);
+
+      // ── Case 1: single shared recipe ──
+      if (data.type === 'recipe' && data.recipe) {
+        const r = data.recipe;
+        if (!r.title) throw new Error('Ungültiges Rezeptformat');
+        const exists = recipes.find(x => x.title.toLowerCase() === r.title.toLowerCase());
+        if (!confirm(`Rezept "${r.title}" hinzufügen?${exists ? '\n\nEin Rezept mit gleichem Namen existiert bereits – es wird zusätzlich angelegt.' : ''}`)) return;
+        const newRecipe = { ...r, id: 'r' + Date.now() + '_' + Math.random().toString(36).slice(2,7), created: Date.now() };
+        recipes.unshift(newRecipe);
+        save(KEY_RECIPES, recipes);
+        status.innerHTML = `<div style="background:#EBF0E6;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--olive);font-weight:700">
+          ✅ Rezept "${r.title}" hinzugefügt</div>`;
+        closeModal('modal-backup');
+        renderRecipes();
+        renderHome();
+        showToast('✅ Rezept importiert');
+        return;
+      }
+
+      // ── Case 2: shared shopping list ──
+      if (data.type === 'shoppingList' && data.items) {
+        if (!confirm(`Einkaufsliste mit ${data.items.length} Artikeln importieren?\n\nWird zur aktuellen Einkaufsliste hinzugefügt.`)) return;
+        if (!shopping.items) shopping.items = [];
+        data.items.forEach(item => {
+          // avoid exact duplicates (same name+unit already in list)
+          const exists = shopping.items.find(i => i.name.toLowerCase() === item.name.toLowerCase() && i.unit === item.unit);
+          if (!exists) {
+            shopping.items.push({ ...item, key: 'imported_' + Date.now() + '_' + Math.random().toString(36).slice(2,5) });
+          }
+        });
+        shopping.items.sort((a,b) => a.name.localeCompare(b.name));
+        save(KEY_SHOPPING, shopping);
+        status.innerHTML = `<div style="background:#EBF0E6;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:var(--olive);font-weight:700">
+          ✅ ${data.items.length} Artikel zur Einkaufsliste hinzugefügt</div>`;
+        closeModal('modal-backup');
+        renderHome();
+        showToast('✅ Einkaufsliste importiert');
+        return;
+      }
+
+      // ── Case 3: full backup ──
       if (!data.version || !data.recipes) throw new Error('Ungültiges Format');
       if (!confirm(`Backup vom ${data.exported ? new Date(data.exported).toLocaleDateString('de-CH') : '?'} importieren?
 
